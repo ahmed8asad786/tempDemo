@@ -1,0 +1,1 @@
+Temperature being written to a waveshare display via a temperature sensor

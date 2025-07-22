@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "device.h": "c",
+        "stdio.h": "c"
+    }
+}
