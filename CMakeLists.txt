@@ -3,4 +3,4 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(tempDemo)
 
-target_sources(app PRIVATE src/main.c src/text.c)
+target_sources(app PRIVATE src/main.c src/text.c src/my_image.c)

@@ -10,6 +10,8 @@
 #include <zephyr/devicetree.h>
 #include <stdio.h>
 #include <zephyr/logging/log.h>
+#include <math.h>
+#include "my_image.h"
 
 #define DHT_NODE DT_PATH(dht11)
 
@@ -18,6 +20,9 @@
 #define DISPLAY_PITCH      DISPLAY_WIDTH
 #define DISPLAY_BYTE_PITCH ((DISPLAY_WIDTH + 7) / 8)
 #define DISPLAY_BUF_SIZE   (DISPLAY_BYTE_PITCH * DISPLAY_HEIGHT)
+
+extern const Img raindrop;
+extern const Img flame;
 
 LOG_MODULE_REGISTER(main);
 #define PIXEL_ON 0
@@ -56,7 +61,94 @@ static void pack_buffer(void) {
    }
 }
 
+void draw_my_image(int x_offset, int y_offset, const Img  *image) {
+   int width = image->width;
+   int height = image->height;
+   int bytes_per_row = image->pitch;  // (100 + 7) / 8
 
+
+   for (int y = 0; y < height; y++) {
+       for (int byte_index = 0; byte_index < bytes_per_row; byte_index++) {
+           uint8_t byte = image->img_data[y * bytes_per_row + byte_index];
+           for (int bit = 0; bit < 8; bit++) {
+               int x = byte_index * 8 + bit;
+               if (x >= width) break;  
+
+
+               if (byte & (0x80 >> bit)) {
+                   set_pixel(x + x_offset, y + y_offset);
+               }
+           }
+       }
+   }
+}
+
+void pattern_raindrop(int x_offset, int y_offset) {
+    const int width = 20;
+    const int height = 27;
+
+    int triangle_height = height / 3;       // top 1/3 is triangle
+    int ellipse_height = height - triangle_height;  // bottom 2/3 is half ellipse
+
+    // Draw triangle (pointy top)
+    for (int y = 0; y < triangle_height; y++) {
+        // Triangle width grows linearly from 0 at tip to full width at base of triangle
+        float max_dx = ((float)y / triangle_height) * (width / 2.0f);
+
+        for (int x = 0; x < width; x++) {
+            float dx = fabsf(x - width / 2.0f);
+
+            if (dx <= max_dx) {
+                set_pixel(x + x_offset, y + y_offset);
+            }
+        }
+    }
+
+    // Draw half ellipse (rounded bottom)
+    for (int y = 0; y < ellipse_height; y++) {
+        float norm_y = (float)y / ellipse_height;  // 0 to 1
+        float radius = (width / 2.0f) * sqrtf(1.0f - norm_y * norm_y);  // ellipse radius shrinking towards top
+
+        int real_y = y + triangle_height;
+
+        for (int x = 0; x < width; x++) {
+            float dx = fabsf(x - width / 2.0f);
+            if (dx <= radius) {
+                set_pixel(x + x_offset, real_y + y_offset);
+            }
+        }
+    }
+}
+
+
+void draw_sun(int cx, int cy, int radius) {
+    // Draw the circular body of the sun (simple circle algorithm)
+       double M_PI = 3.14159265358979323846;
+    for (int angle = 0; angle < 360; angle++) {
+        float rad = angle * M_PI / 180.0;
+        int x = cx + (int)(radius * cos(rad));
+        int y = cy + (int)(radius * sin(rad));
+        set_pixel(x, y);
+    }
+
+    // Draw rays (12 rays, every 30 degrees)
+    int ray_len = radius + 4;
+    for (int angle = 0; angle < 360; angle += 30) {
+        float rad = angle * M_PI / 180.0;
+        int x1 = cx + (int)(radius * cos(rad));
+        int y1 = cy + (int)(radius * sin(rad));
+        int x2 = cx + (int)(ray_len * cos(rad));
+        int y2 = cy + (int)(ray_len * sin(rad));
+
+        // Draw simple straight line ray
+        int steps = ray_len;
+        for (int i = 0; i <= steps; i++) {
+            int x = x1 + (x2 - x1) * i / steps;
+            int y = y1 + (y2 - y1) * i / steps;
+            set_pixel(x, y);
+        }
+    }
+}
 
 
 
@@ -117,33 +209,94 @@ int main(void)
 
     printk("DHT11 sensor ready\n");
 
- while (1) {
+int last_temp = INT32_MIN;  
+int last_humid= INT32_MIN;
+    int count= 0;
+while (1) {
     struct sensor_value temp;
-
+    struct sensor_value humidity;
     if (sensor_sample_fetch(dht_dev) == 0 &&
-        sensor_channel_get(dht_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp) == 0) {
+        sensor_channel_get(dht_dev, SENSOR_CHAN_AMBIENT_TEMP, &temp) == 0 &&
+        sensor_channel_get(dht_dev, SENSOR_CHAN_HUMIDITY, &humidity)==0){
+            
+         float temp_c = temp.val1 + temp.val2 / 1000000.0f;
+        float rh = humidity.val1 + humidity.val2 / 1000000.0f;
+        float temp_f = temp_c * 9.0f / 5.0f + 32.0f;
 
-        char str[50];
+        // Calculate Heat Index in Fahrenheit using the exact formula
+        float HI_f = -42.379f
+                   + 2.04901523f * temp_f
+                   + 10.14333127f * rh
+                   - 0.22475541f * temp_f * rh
+                   - 0.00683783f * temp_f * temp_f
+                   - 0.05481717f * rh * rh
+                   + 0.00122874f * temp_f * temp_f * rh
+                   + 0.00085282f * temp_f * rh * rh
+                   - 0.00000199f * temp_f * temp_f * rh * rh;
 
-        // Start with prefix
-        snprintk(str, sizeof(str), "Temperature is: %d", temp.val1);
+        // Convert result back to Celsius
+        int heat_index_celsius = (int)((HI_f - 32.0f) * 5.0f / 9.0f);
 
-        // Append suffix
-        strncat(str, " Celsius", sizeof(str) - strlen(str) - 1);
+        
 
-        printk("Temp: %d.%06d C\n", temp.val1, temp.val2);
-        printk("%s\n", str);
-        draw_string_7x9(str, 10, 50);
+              if (temp.val1 != last_temp || humidity.val1 != last_humid) {
+            last_temp = temp.val1;
+            last_humid = humidity.val1;
 
-        pack_buffer();
-        display_write(display_dev, 0, 0, &desc, buf);
-        memset(raw_buf, 0xFF, sizeof(raw_buf));  // Clear after draw
-    } else {
+            memset(raw_buf, 0xFF, sizeof(raw_buf));  // Clear to white before drawing
+
+            char temp_str[50];
+            char humidity_str[50];
+            char heat_index_str[50];
+            snprintk(temp_str, sizeof(temp_str), "Temperature %d.%02d,C", temp.val1, temp.val2 / 10000);
+            snprintk(humidity_str, sizeof(humidity_str), "Humidity %d.%02d%%", humidity.val1, humidity.val2 / 10000);
+            if(temp.val1>=26){
+            snprintk(heat_index_str, sizeof(heat_index_str), "Heat Index %d.%02d,C", heat_index_celsius);
+    
+            }
+            else{
+            snprintk(heat_index_str, sizeof(heat_index_str), "Heat Index: %d.%02d,C", temp.val1);
+            }
+            
+            printk("Temp: %d.%06d C, Humidity: %d.%06d %d%%\n", temp.val1, temp.val2, humidity.val1, humidity.val2);
+            printk("Heat Index: %d\n", heat_index_celsius);
+            if (count%2==0){
+            draw_string_8x10(temp_str, 9, 56);
+            draw_string_8x10(humidity_str, 9, 20);
+            draw_string_8x10(heat_index_str, 9, 91);
+             if(humidity.val1>=50){
+                draw_my_image(146, 13, &raindrop);
+             }
+            
+             if (heat_index_celsius>=24){
+                draw_my_image(195, 56, &flame);
+             }
+            }
+            else{
+                draw_string_8x10(temp_str, 10, 57);
+                draw_string_8x10(humidity_str, 10, 21);
+                draw_string_8x10(heat_index_str, 10, 92);
+                     if(humidity.val1>=50){
+                draw_my_image(147, 14, &raindrop);
+             }
+             if (heat_index_celsius>=24){
+                draw_my_image(196, 57, &flame);
+             }
+            }
+            pack_buffer();
+            display_write(display_dev, 0, 0, &desc, buf);
+            memset(raw_buf, 0xFF, sizeof(raw_buf)); 
+            count++;
+
+        } else {
+            printk("Temp and humidity unchanged (%d°C and %%), skipping refresh\n", temp.val1, humidity.val1);
+        }
+    }
+
+     else {
         printk("Failed to read from DHT11\n");
     }
 
     k_sleep(K_SECONDS(3));
 }
-
-
 }
