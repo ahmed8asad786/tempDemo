@@ -61,6 +61,8 @@ static void pack_buffer(void) {
    }
 }
 
+
+//image drawn method, used for raindrop and temperature icons
 void draw_my_image(int x_offset, int y_offset, const Img  *image) {
    int width = image->width;
    int height = image->height;
@@ -83,72 +85,6 @@ void draw_my_image(int x_offset, int y_offset, const Img  *image) {
    }
 }
 
-void pattern_raindrop(int x_offset, int y_offset) {
-    const int width = 20;
-    const int height = 27;
-
-    int triangle_height = height / 3;       // top 1/3 is triangle
-    int ellipse_height = height - triangle_height;  // bottom 2/3 is half ellipse
-
-    // Draw triangle (pointy top)
-    for (int y = 0; y < triangle_height; y++) {
-        // Triangle width grows linearly from 0 at tip to full width at base of triangle
-        float max_dx = ((float)y / triangle_height) * (width / 2.0f);
-
-        for (int x = 0; x < width; x++) {
-            float dx = fabsf(x - width / 2.0f);
-
-            if (dx <= max_dx) {
-                set_pixel(x + x_offset, y + y_offset);
-            }
-        }
-    }
-
-    // Draw half ellipse (rounded bottom)
-    for (int y = 0; y < ellipse_height; y++) {
-        float norm_y = (float)y / ellipse_height;  // 0 to 1
-        float radius = (width / 2.0f) * sqrtf(1.0f - norm_y * norm_y);  // ellipse radius shrinking towards top
-
-        int real_y = y + triangle_height;
-
-        for (int x = 0; x < width; x++) {
-            float dx = fabsf(x - width / 2.0f);
-            if (dx <= radius) {
-                set_pixel(x + x_offset, real_y + y_offset);
-            }
-        }
-    }
-}
-
-
-void draw_sun(int cx, int cy, int radius) {
-    // Draw the circular body of the sun (simple circle algorithm)
-       double M_PI = 3.14159265358979323846;
-    for (int angle = 0; angle < 360; angle++) {
-        float rad = angle * M_PI / 180.0;
-        int x = cx + (int)(radius * cos(rad));
-        int y = cy + (int)(radius * sin(rad));
-        set_pixel(x, y);
-    }
-
-    // Draw rays (12 rays, every 30 degrees)
-    int ray_len = radius + 4;
-    for (int angle = 0; angle < 360; angle += 30) {
-        float rad = angle * M_PI / 180.0;
-        int x1 = cx + (int)(radius * cos(rad));
-        int y1 = cy + (int)(radius * sin(rad));
-        int x2 = cx + (int)(ray_len * cos(rad));
-        int y2 = cy + (int)(ray_len * sin(rad));
-
-        // Draw simple straight line ray
-        int steps = ray_len;
-        for (int i = 0; i <= steps; i++) {
-            int x = x1 + (x2 - x1) * i / steps;
-            int y = y1 + (y2 - y1) * i / steps;
-            set_pixel(x, y);
-        }
-    }
-}
 
 
 
@@ -258,7 +194,7 @@ while (1) {
             snprintk(heat_index_str, sizeof(heat_index_str), "Heat Index: %d.%02d,C", temp.val1);
             }
             
-            printk("Temp: %d.%06d C, Humidity: %d.%06d %d%%\n", temp.val1, temp.val2, humidity.val1, humidity.val2);
+            printk("Temp: %d.%06d C, Humidity: %d.%06d%%\n", temp.val1, temp.val2, humidity.val1, humidity.val2);
             printk("Heat Index: %d\n", heat_index_celsius);
             if (count%2==0){
             draw_string_8x10(temp_str, 9, 56);
@@ -268,8 +204,8 @@ while (1) {
                 draw_my_image(146, 13, &raindrop);
              }
             
-             if (heat_index_celsius>=24){
-                draw_my_image(195, 56, &flame);
+             if (heat_index_celsius>=26){
+                draw_my_image(192, 56, &flame);
              }
             }
             else{
@@ -279,8 +215,8 @@ while (1) {
                      if(humidity.val1>=50){
                 draw_my_image(147, 14, &raindrop);
              }
-             if (heat_index_celsius>=24){
-                draw_my_image(196, 57, &flame);
+             if (heat_index_celsius>=26){
+                draw_my_image(193, 57, &flame);
              }
             }
             pack_buffer();
@@ -289,7 +225,7 @@ while (1) {
             count++;
 
         } else {
-            printk("Temp and humidity unchanged (%d°C and %%), skipping refresh\n", temp.val1, humidity.val1);
+            printk("Temp and humidity unchanged (%d°C and %d%%), skipping refresh\n", temp.val1, humidity.val1);
         }
     }
 
@@ -297,6 +233,6 @@ while (1) {
         printk("Failed to read from DHT11\n");
     }
 
-    k_sleep(K_SECONDS(3));
+    k_sleep(K_SECONDS(1));
 }
 }

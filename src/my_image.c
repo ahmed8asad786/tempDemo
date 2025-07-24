@@ -1,5 +1,7 @@
 #include "my_image.h"
 
+//pitch calculation: width/8 rounded up
+//array size: height*pitch
 
 const uint8_t raindrop_data[77] = {
 // 'raindrop(1)', 30x30px
@@ -43,6 +45,7 @@ const uint8_t flame_data[333]={
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 0x00, 0x00
 };
+
 const Img flame = {
     .width= 55,
     .height =46,
